@@ -5,8 +5,6 @@ import { generateInvoicePdf } from '@/lib/invoice-pdf'
 
 export const runtime = 'nodejs'
 
-console.log('🔥 ICLOUD-NODEMAILER-ROUTE AKTIV')
-
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -124,7 +122,7 @@ export async function POST(
     })
 
     const subject =
-      `ICLOUD TEST 999 – Rechnung ${invoice.invoice_number} – ${invoice.customer_name}`
+      `Rechnung ${invoice.invoice_number} – ${invoice.customer_name}`
 
     const ownerName =
       company.owner_name ||
