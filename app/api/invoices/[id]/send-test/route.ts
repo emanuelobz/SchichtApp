@@ -209,7 +209,27 @@ export async function POST(
         },
       ],
     })
+    const { error: statusError } = await supabase
+      .from('invoices')
+      .update({
+        status: 'sent',
+      })
+      .eq('id', id)
 
+    if (statusError) {
+      console.error(
+        'E-Mail wurde gesendet, aber der Rechnungsstatus konnte nicht aktualisiert werden:',
+        statusError
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'Die E-Mail wurde gesendet, aber der Status konnte nicht auf „Versendet“ gesetzt werden.',
+        },
+        { status: 500 }
+      )
+    }
     return NextResponse.json({
       ok: true,
       id: result.messageId,

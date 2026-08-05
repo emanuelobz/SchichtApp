@@ -159,6 +159,7 @@ export default function AdminClient({
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [newCustomer, setNewCustomer] = useState<Customer>(blankCustomer())
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null)
+  const [monthSending, setMonthSending] = useState(false)
   const [selectedInvoiceCustomer, setSelectedInvoiceCustomer] = useState('')
   const [newEntry, setNewEntry] = useState({
     worker_id: workers[0]?.id || '',
@@ -369,6 +370,122 @@ export default function AdminClient({
     window.open(`/admin/invoices/${data.id}`, '_blank', 'noopener,noreferrer')
   }
 
+  async function sendMonthInvoices() {
+  const [year, monthNumber] = month.split('-')
+
+  const monthName = new Intl.DateTimeFormat('de-DE', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(Number(year), Number(monthNumber) - 1, 1))
+
+  const confirmed = window.confirm(
+    `Alle noch nicht versendeten Rechnungen für ${monthName} senden?\n\n` +
+      'Bereits versendete, bezahlte oder stornierte Rechnungen werden nicht erneut gesendet.'
+  )
+
+  if (!confirmed) {
+    return
+  }
+
+  setMonthSending(true)
+  setStatus('Rechnungen werden gesendet …')
+
+  try {
+    const response = await fetch('/api/invoices/send-month', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        month,
+      }),
+    })
+
+    const result = (await response.json()) as {
+      error?: string
+      message?: string
+      total?: number
+      sent?: number
+      failed?: number
+      skipped?: number
+      sentIds?: string[]
+      results?: Array<{
+        invoiceId: string
+        invoiceNumber: number
+        customerName: string
+        recipient?: string
+        success: boolean
+        error?: string
+      }>
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || 'Der Monatsversand konnte nicht ausgeführt werden.'
+      )
+    }
+
+    const sentIds = result.sentIds || []
+
+    if (sentIds.length > 0) {
+      setInvoices((current) =>
+        current.map((invoice) =>
+          sentIds.includes(invoice.id)
+            ? {
+                ...invoice,
+                status: 'sent',
+              }
+            : invoice
+        )
+      )
+    }
+
+    if (result.total === 0) {
+      setStatus(
+        result.message ||
+          'Für diesen Monat gibt es keine unversendeten Rechnungen.'
+      )
+      return
+    }
+
+    const summary = [
+      `${result.sent || 0} erfolgreich gesendet`,
+      `${result.skipped || 0} übersprungen`,
+      `${result.failed || 0} fehlgeschlagen`,
+    ].join(' · ')
+
+    if ((result.failed || 0) > 0) {
+      const failedInvoices = (result.results || [])
+        .filter((item) => !item.success && item.error)
+        .map(
+          (item) =>
+            `Rechnung ${item.invoiceNumber} – ${item.customerName}: ${item.error}`
+        )
+        .join('\n')
+
+      setStatus(`Fehler: ${summary}`)
+
+      window.alert(
+        `${summary}\n\n${failedInvoices || 'Einige Rechnungen konnten nicht gesendet werden.'}`
+      )
+
+      return
+    }
+
+    setStatus(`Monatsversand abgeschlossen: ${summary} ✓`)
+  } catch (error) {
+    setStatus(
+      `Fehler: ${
+        error instanceof Error
+          ? error.message
+          : 'Unbekannter Fehler beim Monatsversand.'
+      }`
+    )
+  } finally {
+    setMonthSending(false)
+  }
+}
+
   async function setInvoiceStatus(id: string, value: string) {
     const { error } = await createClient().from('invoices').update({ status: value }).eq('id', id)
     if (error) return alert(error.message)
@@ -455,7 +572,88 @@ export default function AdminClient({
             <button className="btn primary" disabled={!selectedInvoiceRow || !!invoiceBusy} onClick={createInvoice}>{invoiceBusy ? 'Rechnung wird erstellt …' : 'Rechnung erstellen und öffnen'}</button>
             <div className="warning">Die Rechnung wird archiviert und die Rechnungsnummer sofort erhöht. Bitte vorher Kundendaten und Beträge prüfen.</div>
           </section>
-          <section className="card"><h2>Rechnungsarchiv</h2><div className="tablewrap"><table className="table"><thead><tr><th>Nr.</th><th>Datum</th><th>Kunde</th><th>Zeitraum</th><th>Betrag</th><th>Status</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.invoice_number}</td><td>{deDate(invoice.invoice_date)}</td><td><strong>{invoice.customer_name}</strong></td><td>{invoice.service_period}</td><td>{euro(invoice.total)}</td><td><select value={invoice.status} onChange={(e) => setInvoiceStatus(invoice.id, e.target.value)}><option value="created">Erstellt</option><option value="sent">Versendet</option><option value="paid">Bezahlt</option><option value="cancelled">Storniert</option></select></td><td><a className="btn secondary invoiceLink" href={`/admin/invoices/${invoice.id}`} target="_blank" rel="noreferrer">Öffnen</a></td></tr>)}</tbody></table></div></section>
+            <section className="card stack">
+              <div className="toolbar">
+                <div>
+                  <h2>Rechnungsarchiv</h2>
+                  <div className="muted">
+                    Sammelversand für den ausgewählten Abrechnungsmonat
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={sendMonthInvoices}
+                  disabled={monthSending}
+                >
+                  {monthSending
+                    ? 'Rechnungen werden gesendet …'
+                    : 'Alle offenen Rechnungen dieses Monats senden'}
+                </button>
+              </div>
+
+              <div className="warning">
+                Versendet werden nur Rechnungen mit dem Status „Erstellt“. Bereits
+                versendete, bezahlte oder stornierte Rechnungen werden übersprungen.
+              </div>
+
+              <div className="tablewrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Nr.</th>
+                      <th>Datum</th>
+                      <th>Kunde</th>
+                      <th>Zeitraum</th>
+                      <th>Betrag</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {invoices.map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td>{invoice.invoice_number}</td>
+                        <td>{deDate(invoice.invoice_date)}</td>
+                        <td>
+                          <strong>{invoice.customer_name}</strong>
+                        </td>
+                        <td>{invoice.service_period}</td>
+                        <td>{euro(invoice.total)}</td>
+
+                        <td>
+                          <select
+                            value={invoice.status}
+                            onChange={(e) =>
+                              setInvoiceStatus(invoice.id, e.target.value)
+                            }
+                            disabled={monthSending}
+                          >
+                            <option value="created">Erstellt</option>
+                            <option value="sent">Versendet</option>
+                            <option value="paid">Bezahlt</option>
+                            <option value="cancelled">Storniert</option>
+                          </select>
+                        </td>
+
+                        <td>
+                          <a
+                            className="btn secondary invoiceLink"
+                            href={`/admin/invoices/${invoice.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Öffnen
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
         </div>
       )}
 
