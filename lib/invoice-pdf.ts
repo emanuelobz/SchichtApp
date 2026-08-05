@@ -59,7 +59,7 @@ function encodeWinAnsi(value: string): Buffer {
 
   for (const char of value) {
     const code = char.codePointAt(0) ?? 63
-    let byte = code <= 255 ? code : cp1252Extra[code] ?? 63
+    const byte = code <= 255 ? code : cp1252Extra[code] ?? 63
 
     if (byte === 0x28 || byte === 0x29 || byte === 0x5c) {
       bytes.push(0x5c)
@@ -77,6 +77,7 @@ function pdfText(value: string): Buffer {
 
 function deDate(value: string) {
   const date = new Date(`${value}T12:00:00`)
+
   return new Intl.DateTimeFormat('de-DE', {
     day: '2-digit',
     month: '2-digit',
@@ -101,9 +102,17 @@ function quantity(value: number) {
 
 function splitAddress(address?: string | null) {
   if (!address) return []
+
   const comma = address.indexOf(',')
-  if (comma < 0) return [address]
-  return [address.slice(0, comma).trim(), address.slice(comma + 1).trim()].filter(Boolean)
+
+  if (comma < 0) {
+    return [address.trim()].filter(Boolean)
+  }
+
+  return [
+    address.slice(0, comma).trim(),
+    address.slice(comma + 1).trim(),
+  ].filter(Boolean)
 }
 
 function wrapText(value: string, maxChars: number) {
@@ -113,15 +122,18 @@ function wrapText(value: string, maxChars: number) {
 
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word
+
     if (candidate.length <= maxChars) {
       current = candidate
-    } else {
-      if (current) lines.push(current)
-      current = word
+      continue
     }
+
+    if (current) lines.push(current)
+    current = word
   }
 
   if (current) lines.push(current)
+
   return lines
 }
 
@@ -133,17 +145,33 @@ class ContentBuilder {
   }
 
   text(value: string, x: number, y: number, size = 10, bold = false) {
-    this.raw(`BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td `)
+    this.raw(
+      `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td `
+    )
     this.parts.push(pdfText(value))
     this.raw(' Tj ET\n')
   }
 
   line(x1: number, y1: number, x2: number, y2: number, width = 0.7) {
-    this.raw(`${width} w ${x1} ${y1} m ${x2} ${y2} l S\n`)
+    this.raw(
+      `${width} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(
+        2
+      )} ${y2.toFixed(2)} l S\n`
+    )
   }
 
-  fillRect(x: number, y: number, width: number, height: number, rgb: [number, number, number]) {
-    this.raw(`${rgb[0]} ${rgb[1]} ${rgb[2]} rg ${x} ${y} ${width} ${height} re f\n0 0 0 rg\n`)
+  fillRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    rgb: [number, number, number]
+  ) {
+    this.raw(
+      `${rgb[0]} ${rgb[1]} ${rgb[2]} rg ${x.toFixed(2)} ${y.toFixed(
+        2
+      )} ${width.toFixed(2)} ${height.toFixed(2)} re f\n0 0 0 rg\n`
+    )
   }
 
   buffer() {
@@ -159,160 +187,329 @@ function createPdf(objects: Buffer[]) {
 
   objects.forEach((body, index) => {
     offsets[index + 1] = position
+
     const prefix = Buffer.from(`${index + 1} 0 obj\n`)
     const suffix = Buffer.from('\nendobj\n')
+
     chunks.push(prefix, body, suffix)
     position += prefix.length + body.length + suffix.length
   })
 
   const xrefPosition = position
   const xrefLines = [`xref\n0 ${objects.length + 1}\n`, '0000000000 65535 f \n']
+
   for (let index = 1; index <= objects.length; index += 1) {
     xrefLines.push(`${String(offsets[index]).padStart(10, '0')} 00000 n \n`)
   }
 
-  const trailer = Buffer.from(
-    `${xrefLines.join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefPosition}\n%%EOF\n`
+  chunks.push(
+    Buffer.from(
+      `${xrefLines.join(
+        ''
+      )}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefPosition}\n%%EOF\n`
+    )
   )
-  chunks.push(trailer)
 
   return Buffer.concat(chunks)
 }
 
 export function generateInvoicePdf(input: InvoicePdfInput): Buffer {
   const content = new ContentBuilder()
-  const blue: [number, number, number] = [0.72, 0.84, 0.95]
-  const darkBlue: [number, number, number] = [0.11, 0.25, 0.4]
-  const left = 46
-  const right = 549
 
-  content.fillRect(left, 757, right - left, 54, blue)
-  content.text('RECHNUNG', 382, 786, 18, true)
-  content.text(`Nr. ${input.invoiceNumber}`, 383, 769, 10, true)
+  const blue: [number, number, number] = [0.68, 0.81, 0.92]
+  const lightLine: [number, number, number] = [0.73, 0.82, 0.9]
 
-  let y = 790
-  content.text(input.customerName, left + 12, y, 11, true)
+  const left = 54
+  const right = 541
+  const width = right - left
+
+  /*
+   * Kopfbereich – bewusst wie die Web-/Numbers-Vorlage:
+   * Kunde links, Rechnungsdaten rechts.
+   */
+  const headerBottom = 676
+  const headerHeight = 108
+
+  content.fillRect(left, headerBottom, width, headerHeight, blue)
+
+  const customerX = left + 12
+  let customerY = headerBottom + 83
+
+  content.text(input.customerName, customerX, customerY, 9.2, true)
+
   for (const line of splitAddress(input.customerAddress)) {
-    y -= 14
-    content.text(line, left + 12, y, 10)
+    customerY -= 14
+    content.text(line, customerX, customerY, 8.8)
   }
 
-  const metaX = 360
-  content.text('Rechnungsdatum:', metaX, 744, 9)
-  content.text(deDate(input.invoiceDate), 464, 744, 9, true)
-  content.text('Leistungszeitraum:', metaX, 730, 9)
-  content.text(input.servicePeriod, 464, 730, 9, true)
+  const metaLabelX = 279
+  const metaValueX = 401
+  const metaStartY = headerBottom + 85
+  const metaGap = 15
 
-  content.fillRect(left, 688, right - left, 27, blue)
-  content.text('Rechnungs-Nr.:', left + 12, 697, 10, true)
-  content.text(String(input.invoiceNumber), left + 113, 697, 10, true)
-  content.text(deDate(input.invoiceDate), 465, 697, 10, true)
+  content.text('Rechnungs-Nr.:', metaLabelX, metaStartY, 8.5, true)
+  content.text(String(input.invoiceNumber), metaValueX, metaStartY, 8.5, true)
 
-  content.text('Sehr geehrte/r Kunde,', left, 657, 10)
-  content.text('vielen Dank für Ihren Auftrag und das damit verbundene Vertrauen!', left, 638, 10)
-  content.text('Hiermit stelle ich Ihnen folgende Leistungen in Rechnung:', left, 624, 10)
+  content.text('Rechnungsdatum:', metaLabelX, metaStartY - metaGap, 8.5)
+  content.text(deDate(input.invoiceDate), metaValueX, metaStartY - metaGap, 8.5)
 
-  content.text('Berechnung für den Zeitraum vom:', left, 595, 10, true)
-  content.text(input.servicePeriod, 383, 595, 10, true)
+  content.text('Leistungszeitraum:', metaLabelX, metaStartY - metaGap * 2, 8.5)
+  content.text(input.servicePeriod, metaValueX, metaStartY - metaGap * 2, 8.5)
 
-  const tableTop = 572
-  const rowHeight = 27
-  const col = [left, 78, 326, 387, 467, right]
-  content.fillRect(left, tableTop - rowHeight, right - left, rowHeight, blue)
-  ;['Pos.', 'Beschreibung', 'Menge', 'Einzelpreis', 'Gesamtpreis'].forEach((label, index) => {
-    content.text(label, col[index] + 5, tableTop - 18, 9, true)
+  content.text('Kunde:', metaLabelX, metaStartY - metaGap * 3, 8.5)
+  content.text(input.customerName, metaValueX, metaStartY - metaGap * 3, 8.5)
+
+  content.text('Kunde E-Mail:', metaLabelX, metaStartY - metaGap * 4, 8.5)
+  content.text(input.customerEmail || '—', metaValueX, metaStartY - metaGap * 4, 8.5)
+
+  /*
+   * Rechnungsnummer-Leiste.
+   */
+  const invoiceBarY = 654
+  content.fillRect(left, invoiceBarY, 151, 22, blue)
+  content.text('Rechnungs-Nr.:', left + 2, invoiceBarY + 7, 8.6, true)
+  content.text(String(input.invoiceNumber), left + 89, invoiceBarY + 7, 8.6, true)
+  content.text(deDate(input.invoiceDate), right - 61, invoiceBarY + 7, 8.6)
+
+  content.line(left, invoiceBarY - 1, right, invoiceBarY - 1, 0.35)
+
+  /*
+   * Anschreiben.
+   */
+  let y = 614
+  content.text('Sehr geehrte/r Kunde,', left + 2, y, 8.7)
+  y -= 16
+  content.text(
+    'vielen Dank für Ihren Auftrag und das damit verbundene Vertrauen!',
+    left + 2,
+    y,
+    8.7
+  )
+  y -= 13
+  content.text(
+    'Hiermit stelle ich Ihnen folgende Leistungen in Rechnung:',
+    left + 2,
+    y,
+    8.7
+  )
+
+  y -= 38
+  content.text('Berechnung für den Zeitraum vom:', left + 2, y, 8.8, true)
+  content.text(input.servicePeriod, 304, y, 8.8, true)
+
+  /*
+   * Leistungstabelle.
+   */
+  const tableTop = y - 23
+  const headerRowHeight = 20
+  const rowHeight = 18
+  const columns = [left, left + 28, left + 270, left + 340, left + 414, right]
+
+  content.fillRect(left, tableTop - headerRowHeight, width, headerRowHeight, blue)
+
+  const headings = ['Pos.', 'Beschreibung', 'Menge', 'Einzelpreis', 'Gesamtpreis']
+
+  headings.forEach((heading, index) => {
+    content.text(
+      heading,
+      columns[index] + (index === 0 ? 4 : 5),
+      tableTop - 14,
+      8,
+      true
+    )
   })
 
-  let rowY = tableTop - rowHeight
   const items = input.lineItems.slice(0, 5)
+  let rowTop = tableTop - headerRowHeight
+
   for (let index = 0; index < 5; index += 1) {
-    rowY -= rowHeight
+    const rowBottom = rowTop - rowHeight
     const item = items[index]
-    content.line(left, rowY, right, rowY, 0.45)
-    for (const x of col) content.line(x, rowY, x, rowY + rowHeight, 0.45)
+
+    content.line(left, rowBottom, right, rowBottom, 0.32)
+
+    for (const x of columns) {
+      content.line(x, rowBottom, x, rowTop, 0.32)
+    }
 
     if (item) {
-      content.text(`${item.position}.`, col[0] + 8, rowY + 9, 9)
-      const descriptionLines = wrapText(item.description, 44).slice(0, 2)
+      content.text(`${item.position}.`, columns[0] + 8, rowBottom + 6, 7.9)
+
+      const descriptionLines = wrapText(item.description, 56).slice(0, 2)
+
       descriptionLines.forEach((line, lineIndex) => {
-        content.text(line, col[1] + 6, rowY + 14 - lineIndex * 10, 8.5)
+        content.text(
+          line,
+          columns[1] + 5,
+          rowBottom + 10 - lineIndex * 8,
+          7.8
+        )
       })
-      content.text(quantity(item.quantity), col[2] + 20, rowY + 9, 9)
-      content.text(euro(item.unitPrice), col[3] + 9, rowY + 9, 9)
-      content.text(euro(item.total), col[4] + 8, rowY + 9, 9)
+
+      content.text(
+        quantity(item.quantity),
+        columns[2] + 37,
+        rowBottom + 6,
+        7.9
+      )
+      content.text(
+        euro(item.unitPrice),
+        columns[3] + 26,
+        rowBottom + 6,
+        7.9
+      )
+      content.text(
+        euro(item.total),
+        columns[4] + 26,
+        rowBottom + 6,
+        7.9
+      )
     } else {
-      content.text('…', col[0] + 9, rowY + 9, 9)
-      content.text('…', col[1] + 7, rowY + 9, 9)
-      content.text('–', col[2] + 23, rowY + 9, 9)
-      content.text('–', col[4] + 18, rowY + 9, 9)
+      content.text('…', columns[0] + 9, rowBottom + 6, 7.9)
+      content.text('…', columns[1] + 5, rowBottom + 6, 7.9)
+      content.text('–', columns[2] + 40, rowBottom + 6, 7.9)
+      content.text('–', columns[4] + 35, rowBottom + 6, 7.9)
     }
+
+    rowTop = rowBottom
   }
 
-  content.line(left, tableTop, right, tableTop, 0.6)
-  for (const x of col) content.line(x, tableTop - rowHeight * 6, x, tableTop, 0.45)
+  content.line(left, tableTop, right, tableTop, 0.4)
 
-  let totalY = tableTop - rowHeight * 6 - 25
-  content.text('Gesamtbetrag netto:', 367, totalY, 10, true)
-  content.text(euro(input.total), 486, totalY, 10, true)
-  totalY -= 17
-  content.fillRect(355, totalY - 7, 194, 25, blue)
-  content.text('Gesamtbetrag brutto:', 367, totalY, 10, true)
-  content.text(euro(input.total), 486, totalY, 10, true)
+  /*
+   * Summenbereich – volle Breite wie in der alten Rechnung.
+   */
+  const totalsHeight = 35
+  const totalsBottom = rowTop - totalsHeight
 
-  const companyName = input.company.company_name || input.company.owner_name || 'Rechnungsaussteller'
+  content.fillRect(left, totalsBottom, width, totalsHeight, blue)
+
+  content.text('Gesamtbetrag netto:', left + 24, totalsBottom + 23, 8.4, true)
+  content.text(euro(input.total), right - 48, totalsBottom + 23, 8.4, true)
+
+  content.text('Gesamtbetrag brutto:', left + 24, totalsBottom + 8, 8.4, true)
+  content.text(euro(input.total), right - 48, totalsBottom + 8, 8.4, true)
+
+  /*
+   * Zahlung und Rechtstexte.
+   */
+  const companyName =
+    input.company.company_name ||
+    input.company.owner_name ||
+    'Rechnungsaussteller'
+
   const paymentDays = input.company.payment_days || 7
-  let textY = totalY - 40
+  let textY = totalsBottom - 28
 
-  const paymentLine = `Ich bitte um Überweisung des Rechnungsbetrages innerhalb von ${paymentDays} Tagen nach Rechnungsdatum an IBAN:`
-  for (const line of wrapText(paymentLine, 92)) {
-    content.text(line, left, textY, 9)
-    textY -= 13
+  const paymentIntro =
+    `Ich bitte um Überweisung des Rechnungsbetrages innerhalb von ${paymentDays} Tagen ` +
+    'nach Rechnungsdatum an IBAN:'
+
+  for (const line of wrapText(paymentIntro, 105)) {
+    content.text(line, left + 2, textY, 8)
+    textY -= 11
   }
-  content.text(`${input.company.iban || ''}${input.company.bank_name ? ` (${input.company.bank_name})` : ''}`, left, textY, 9, true)
-  textY -= 24
+
+  const bankLine =
+    `${input.company.iban || ''}` +
+    `${input.company.bank_name ? ` (${input.company.bank_name})` : ''}`
+
+  content.text(bankLine, left + 2, textY, 8, true)
+  textY -= 28
 
   if (input.company.small_business) {
-    for (const line of wrapText('Der Rechnungsaussteller ist Kleinunternehmer im Sinne des § 19 UStG und weist daher keine Umsatzsteuer aus.', 100)) {
-      content.text(line, left, textY, 8.7)
-      textY -= 12
+    const smallBusinessText =
+      'Der Rechnungsaussteller ist Kleinunternehmer im Sinne des § 19 UStG ' +
+      'und weist daher keine Umsatzsteuer aus.'
+
+    for (const line of wrapText(smallBusinessText, 108)) {
+      content.text(line, left + 2, textY, 7.8)
+      textY -= 10.5
     }
-    textY -= 9
+
+    textY -= 14
   }
 
-  for (const line of wrapText('Gesetzlich vorgeschriebener Hinweis: Sie kommen automatisch ohne weitere Mahnung in Verzug, wenn Sie nicht innerhalb von 30 Tagen nach Fälligkeit und Zugang dieser Rechnung bezahlen (§ 286 Abs. 3 BGB).', 104)) {
-    content.text(line, left, textY, 8.4)
-    textY -= 11.5
+  const legalText =
+    'Gesetzlich vorgeschriebener Hinweis: Sie kommen automatisch ohne weitere Mahnung ' +
+    'in Verzug, wenn Sie nicht innerhalb von 30 Tagen nach Fälligkeit und Zugang dieser ' +
+    'Rechnung bezahlen (§ 286 Abs. 3 BGB).'
+
+  for (const line of wrapText(legalText, 110)) {
+    content.text(line, left + 2, textY, 7.6, true)
+    textY -= 10
   }
 
-  textY -= 15
-  content.text('Vielen Dank für Ihren Auftrag,', left, textY, 9)
-  content.text(input.company.owner_name || companyName, left, textY - 14, 9, true)
+  textY -= 18
+  content.text('Vielen Dank für Ihren Auftrag,', left + 2, textY, 8)
+  content.text(
+    input.company.owner_name || companyName,
+    left + 2,
+    textY - 13,
+    8.2,
+    true
+  )
 
-  const footerY = 38
-  content.fillRect(left, footerY, right - left, 64, blue)
-  content.raw(`${darkBlue[0]} ${darkBlue[1]} ${darkBlue[2]} rg\n`)
+  /*
+   * Footer unten – Daten der Mutter, nicht des Kunden.
+   */
+  const footerBottom = 34
+  const footerHeight = 58
 
-  content.text(companyName, left + 10, footerY + 45, 8.5, true)
-  content.text(input.company.address || '', left + 10, footerY + 31, 8)
-  content.text(`${input.company.postal_code || ''} ${input.company.city || ''}`.trim(), left + 10, footerY + 19, 8)
-  content.text(input.company.email || '', left + 10, footerY + 7, 8)
+  content.fillRect(left, footerBottom, width, footerHeight, blue)
 
-  content.text(input.company.bank_name || '', 240, footerY + 45, 8.5, true)
-  content.text(`IBAN ${input.company.iban || ''}`, 240, footerY + 31, 8)
-  content.text(`BIC ${input.company.bic || ''}`, 240, footerY + 19, 8)
+  const footerLeftX = left + 8
+  const footerCenterX = 234
+  const footerRightX = 405
 
-  content.text(`Steuernummer: ${input.company.tax_number || ''}`, 408, footerY + 45, 8.5, true)
-  content.text(input.company.owner_name || '', 408, footerY + 31, 8)
-  content.raw('0 0 0 rg\n')
+  content.text(companyName, footerLeftX, footerBottom + 41, 7.4, true)
+  content.text(input.company.address || '', footerLeftX, footerBottom + 29, 7)
+  content.text(
+    `${input.company.postal_code || ''} ${input.company.city || ''}`.trim(),
+    footerLeftX,
+    footerBottom + 18,
+    7
+  )
+  content.text(input.company.email || '', footerLeftX, footerBottom + 7, 7)
+
+  content.text(input.company.bank_name || '', footerCenterX, footerBottom + 41, 7.4, true)
+  content.text(`IBAN ${input.company.iban || ''}`, footerCenterX, footerBottom + 29, 7)
+  content.text(`BIC ${input.company.bic || ''}`, footerCenterX, footerBottom + 18, 7)
+
+  content.text(
+    `Steuernummer: ${input.company.tax_number || ''}`,
+    footerRightX,
+    footerBottom + 41,
+    7.4,
+    true
+  )
+  content.text(
+    input.company.owner_name || companyName,
+    footerRightX,
+    footerBottom + 29,
+    7
+  )
 
   const stream = content.buffer()
+
   const objects = [
     Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
     Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
-    Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>`),
-    Buffer.concat([Buffer.from(`<< /Length ${stream.length} >>\nstream\n`), stream, Buffer.from('\nendstream')]),
-    Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'),
-    Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'),
+    Buffer.from(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] ` +
+        '/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>'
+    ),
+    Buffer.concat([
+      Buffer.from(`<< /Length ${stream.length} >>\nstream\n`),
+      stream,
+      Buffer.from('\nendstream'),
+    ]),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'
+    ),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'
+    ),
   ]
 
   return createPdf(objects)
