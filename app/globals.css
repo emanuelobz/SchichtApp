@@ -1935,3 +1935,45 @@ h3 {
   white-space: nowrap;
   font-size: 13px;
 }
+
+/* Sichtbare Rückmeldung bei Logout und Aktualisieren */
+
+.motherLogout .btn {
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+}
+
+.motherLogout .btn:active {
+  color: #ffffff;
+  background: var(--blue);
+  transform: scale(0.96);
+  box-shadow: 0 6px 16px rgba(33, 103, 243, 0.22);
+}
+
+.motherLogout .btn.buttonConfirmed {
+  color: #ffffff;
+  background: #238248;
+  opacity: 1;
+  box-shadow: 0 6px 16px rgba(35, 130, 72, 0.22);
+}
+
+.motherLogout .btn.buttonConfirmed:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .motherLogout .btn:active {
+    color: #ffffff;
+    background: var(--blue);
+  }
+
+  .motherLogout .btn.buttonConfirmed {
+    color: #ffffff;
+    background: #238248;
+  }
+}
