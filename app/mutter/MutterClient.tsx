@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import LogoutButton from '@/components/LogoutButton'
+import ReloadButton from '@/components/ReloadButton'
 
 type Customer = {
   id: string
@@ -327,7 +328,8 @@ export default function MutterClient({
         </div>
 
         <div className="motherLogout">
-          <LogoutButton />
+            <LogoutButton />
+            <ReloadButton />
         </div>
       </header>
 

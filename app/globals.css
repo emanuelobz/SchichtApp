@@ -1918,3 +1918,20 @@ h3 {
 .motherEntriesList {
   margin-top: 16px;
 }
+
+.motherLogout {
+  display: grid;
+  width: 112px;
+  gap: 8px;
+}
+
+.motherLogout .btn {
+  width: 100%;
+}
+
+.motherRefreshButton {
+  min-height: 40px;
+  padding: 10px 12px;
+  white-space: nowrap;
+  font-size: 13px;
+}
