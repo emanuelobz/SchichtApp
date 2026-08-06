@@ -315,10 +315,15 @@ export default function MutterClient({
       <header className="motherHeader">
         <div>
           <div className="eyebrow">SchichtApp</div>
-          <h1>Hallo {displayName} 👋</h1>
-          <div className="muted">
-            Trage hier deine Arbeit ein.
-          </div>
+          <h1>
+            Hey {displayName === 'juliet.obazee' ? 'Mama 🤍' : displayName}
+            </h1>
+
+            {displayName === 'juliet.obazee' && (
+            <div className="motherMotivation">
+                Your hard work never goes unnoticed.
+            </div>
+            )}
         </div>
 
         <div className="motherLogout">
