@@ -1,4 +1,4 @@
-# SchichtApp V3 – finale Monatsversion
+# RechnungenApp V3 – finale Monatsversion
 
 ## Wechsel von V2
 1. V2 im Terminal mit `Ctrl + C` stoppen.

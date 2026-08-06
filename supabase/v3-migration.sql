@@ -1,4 +1,4 @@
--- SchichtApp V3 – sichere, wiederholbar ausführbare Migration
+-- RechnungenApp V3 – sichere, wiederholbar ausführbare Migration
 create extension if not exists pgcrypto;
 
 create table if not exists public.profiles (

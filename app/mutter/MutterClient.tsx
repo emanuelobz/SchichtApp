@@ -315,7 +315,7 @@ export default function MutterClient({
     <main className="shell narrow motherShell">
       <header className="motherHeader">
         <div>
-          <div className="eyebrow">SchichtApp</div>
+          <div className="eyebrow">RechnungenApp</div>
           <h1>
             Hey {displayName === 'juliet.obazee' ? 'Mama 🤍' : displayName}
             </h1>

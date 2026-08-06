@@ -1,4 +1,4 @@
--- SchichtApp V5 – Kundenstammdaten, Unternehmensdaten und Rechnungsarchiv
+-- RechnungenApp V5 – Kundenstammdaten, Unternehmensdaten und Rechnungsarchiv
 create extension if not exists pgcrypto;
 
 alter table public.customers add column if not exists address text;
