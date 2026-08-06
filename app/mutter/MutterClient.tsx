@@ -65,10 +65,15 @@ export default function MutterClient({
   const [customHours, setCustomHours] = useState('')
   const [notes, setNotes] = useState('')
 
+  const [hoursStepOpen, setHoursStepOpen] = useState(false)
+  const [hoursConfirmed, setHoursConfirmed] = useState(false)
+
   const [entries, setEntries] = useState(initialEntries)
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<Entry | null>(null)
+
+  const [entriesOpen, setEntriesOpen] = useState(false)
 
   const [customerStepOpen, setCustomerStepOpen] = useState(true)
   const [dateStepOpen, setDateStepOpen] = useState(false)
@@ -114,31 +119,40 @@ export default function MutterClient({
     : hours
 
   function selectCustomer(id: string) {
-    setCustomerId(id)
-    setMsg('')
-    setCustomerStepOpen(false)
-    setDateStepOpen(true)
+  setCustomerId(id)
+  setMsg('')
+  setCustomerStepOpen(false)
+  setDateStepOpen(true)
+  setHoursStepOpen(false)
+  setHoursConfirmed(false)
   }
 
   function quickDate(offset: number, selection: QuickDate) {
-    const nextDate = new Date()
-    nextDate.setDate(nextDate.getDate() + offset)
+  const nextDate = new Date()
+  nextDate.setDate(nextDate.getDate() + offset)
 
-    setDate(iso(nextDate))
-    setQuickDateSelection(selection)
-    setDateConfirmed(true)
-    setDateStepOpen(false)
-    setMsg('')
+  setDate(iso(nextDate))
+  setQuickDateSelection(selection)
+  setDateConfirmed(true)
+  setDateStepOpen(false)
 
-    navigator.vibrate?.(25)
+  setHoursConfirmed(false)
+  setHoursStepOpen(true)
+
+  setMsg('')
+  navigator.vibrate?.(25)
   }
 
   function selectManualDate(value: string) {
-    setDate(value)
-    setQuickDateSelection(null)
-    setDateConfirmed(true)
-    setDateStepOpen(false)
-    setMsg('')
+  setDate(value)
+  setQuickDateSelection(null)
+  setDateConfirmed(true)
+  setDateStepOpen(false)
+
+  setHoursConfirmed(false)
+  setHoursStepOpen(true)
+
+  setMsg('')
   }
 
   function resetForm() {
@@ -153,7 +167,10 @@ export default function MutterClient({
     setDateStepOpen(false)
     setDateConfirmed(false)
     setQuickDateSelection(null)
-  }
+
+    setHoursStepOpen(false)
+    setHoursConfirmed(false)
+  } 
 
   async function save() {
     if (!customerId) {
@@ -512,107 +529,172 @@ export default function MutterClient({
         </div>
 
         {customerId && dateConfirmed && (
-          <div className="motherDetails">
-            <div className="motherSectionTitle">
-              <span className="motherStepNumber">3</span>
-
-              <div>
-                <strong>Wie viele Stunden?</strong>
-                <small>Tippe die passende Zeit an.</small>
-              </div>
-            </div>
-
-            <div className="hours">
-              {hourOptions.map((hour) => (
-                <button
-                  type="button"
-                  className={`hourBtn ${
-                    !customHours && hours === hour
-                      ? 'active'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    setHours(hour)
-                    setCustomHours('')
-                    setMsg('')
-                  }}
-                  key={hour}
+            <>
+                <div
+                className={`motherStep ${
+                    hoursConfirmed && !hoursStepOpen
+                    ? 'motherStepComplete'
+                    : ''
+                }`}
                 >
-                  {String(hour).replace('.', ',')}
-                  <small>Std.</small>
+                <button
+                    type="button"
+                    className="motherStepHeader"
+                    onClick={() => setHoursStepOpen(true)}
+                >
+                    <span className="motherStepNumber">
+                    {hoursConfirmed ? '✓' : '3'}
+                    </span>
+
+                    <span className="motherStepHeading">
+                    <strong>Stundenzahl</strong>
+
+                    <small>
+                        {hoursConfirmed
+                        ? `${String(finalHours).replace('.', ',')} Stunden`
+                        : 'Wie lange hast du gearbeitet?'}
+                    </small>
+                    </span>
+
+                    {hoursConfirmed && !hoursStepOpen && (
+                    <span className="motherChange">Ändern</span>
+                    )}
                 </button>
-              ))}
-            </div>
 
-            <div className="field">
-              <label>Andere Stundenzahl</label>
+                {hoursStepOpen && (
+                    <div className="motherStepContent">
+                    <div className="hours">
+                        {hourOptions.map((hour) => (
+                        <button
+                            type="button"
+                            className={`hourBtn ${
+                            !customHours && hours === hour
+                                ? 'active'
+                                : ''
+                            }`}
+                            onClick={() => {
+                            setHours(hour)
+                            setCustomHours('')
+                            setHoursConfirmed(true)
+                            setHoursStepOpen(false)
+                            setMsg('')
 
-              <input
-                inputMode="decimal"
-                value={customHours}
-                onChange={(event) => {
-                  setCustomHours(event.target.value)
-                  setMsg('')
-                }}
-                placeholder="Zum Beispiel 5,5"
-              />
-            </div>
+                            navigator.vibrate?.(25)
+                            }}
+                            key={hour}
+                        >
+                            {String(hour).replace('.', ',')}
+                            <small>Std.</small>
+                        </button>
+                        ))}
+                    </div>
 
-            <div className="field">
-              <label>
-                Notiz{' '}
-                <span className="muted">(optional)</span>
-              </label>
+                    <div className="motherDateDivider">
+                        <span>oder andere Stundenzahl</span>
+                    </div>
 
-              <textarea
-                value={notes}
-                onChange={(event) =>
-                  setNotes(event.target.value)
-                }
-                placeholder="Zum Beispiel: Schlüssel abgegeben"
-              />
-            </div>
+                    <div className="field">
+                        <input
+                        inputMode="decimal"
+                        value={customHours}
+                        onChange={(event) => {
+                            setCustomHours(event.target.value)
+                            setHoursConfirmed(false)
+                            setMsg('')
+                        }}
+                        placeholder="Zum Beispiel 5,5"
+                        />
+                    </div>
 
-            {selected && (
-              <div className="motherSummary">
-                <div className="motherSummaryIcon">✓</div>
+                    {customHours && Number(customHours.replace(',', '.')) > 0 && (
+                        <button
+                        type="button"
+                        className="btn secondary motherConfirmHours"
+                        onClick={() => {
+                            const value = Number(
+                            customHours.replace(',', '.')
+                            )
 
-                <div>
-                  <strong>{selected.name}</strong>
+                            if (!value || value <= 0 || value > 24) {
+                            setMsg(
+                                'Bitte eine gültige Stundenzahl eingeben.'
+                            )
+                            return
+                            }
 
-                  <span>
-                    {niceDate(date)} ·{' '}
-                    {String(finalHours).replace('.', ',')}{' '}
-                    Stunden
-                  </span>
+                            setHoursConfirmed(true)
+                            setHoursStepOpen(false)
+                            setMsg('')
+
+                            navigator.vibrate?.(25)
+                        }}
+                        >
+                        {customHours.replace('.', ',')} Stunden übernehmen
+                        </button>
+                    )}
+                    </div>
+                )}
                 </div>
-              </div>
-            )}
 
-            {msg && (
-              <div
-                className={
-                  msg.includes('✓') ? 'success' : 'error'
-                }
-              >
-                {msg}
-              </div>
-            )}
+                {hoursConfirmed && (
+                <div className="motherDetails">
+                    <div className="field">
+                    <label>
+                        Notiz{' '}
+                        <span className="muted">(optional)</span>
+                    </label>
 
-            <div className="saveBar">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={loading}
-                onClick={save}
-              >
-                {loading
-                  ? 'Wird gespeichert …'
-                  : 'Eintrag speichern'}
-              </button>
-            </div>
-          </div>
-        )}
+                    <textarea
+                        value={notes}
+                        onChange={(event) =>
+                        setNotes(event.target.value)
+                        }
+                        placeholder="Zum Beispiel: Schlüssel abgegeben"
+                    />
+                    </div>
+
+                    {selected && (
+                    <div className="motherSummary">
+                        <div className="motherSummaryIcon">✓</div>
+
+                        <div>
+                        <strong>{selected.name}</strong>
+
+                        <span>
+                            {niceDate(date)} ·{' '}
+                            {String(finalHours).replace('.', ',')}{' '}
+                            Stunden
+                        </span>
+                        </div>
+                    </div>
+                    )}
+
+                    {msg && (
+                    <div
+                        className={
+                        msg.includes('✓') ? 'success' : 'error'
+                        }
+                    >
+                        {msg}
+                    </div>
+                    )}
+
+                    <div className="saveBar">
+                    <button
+                        type="button"
+                        className="btn primary"
+                        disabled={loading}
+                        onClick={save}
+                    >
+                        {loading
+                        ? 'Wird gespeichert …'
+                        : 'Eintrag speichern'}
+                    </button>
+                    </div>
+                </div>
+                )}
+            </>
+            )}
 
         {msg && (!customerId || !dateConfirmed) && (
           <div
@@ -626,62 +708,82 @@ export default function MutterClient({
       </section>
 
       <section className="card motherEntries">
-        <div className="motherEntriesHeader">
-          <div>
+        <button
+            type="button"
+            className="motherEntriesToggle"
+            onClick={() => setEntriesOpen((open) => !open)}
+            aria-expanded={entriesOpen}
+        >
+            <div>
             <h2>Letzte Einträge</h2>
+
             <div className="muted">
-              Hier kannst du Fehler korrigieren.
+                {entriesOpen
+                ? 'Tippe erneut, um die Liste zu schließen.'
+                : 'Tippe hier, um frühere Einträge zu sehen.'}
             </div>
-          </div>
-
-          <span className="badge">{entries.length}</span>
-        </div>
-
-        <div className="entryList">
-          {entries.length === 0 ? (
-            <div className="empty">
-              Noch keine Einträge.
             </div>
-          ) : (
-            entries.slice(0, 30).map((entry) => (
-              <div className="entry" key={entry.id}>
-                <div className="entryMain">
-                  <div className="entryTitle">
-                    {entry.customers?.name}
-                  </div>
 
-                  <div className="entryMeta">
-                    {niceDate(entry.work_date)} ·{' '}
-                    {String(entry.hours).replace('.', ',')}{' '}
-                    Std.
-                    {entry.notes
-                      ? ` · ${entry.notes}`
-                      : ''}
-                  </div>
+            <div className="motherEntriesToggleRight">
+            <span className="badge">{entries.length}</span>
+
+            <span
+                className={`motherEntriesArrow ${
+                entriesOpen ? 'open' : ''
+                }`}
+            >
+                ↓
+            </span>
+            </div>
+        </button>
+
+        {entriesOpen && (
+            <div className="entryList motherEntriesList">
+            {entries.length === 0 ? (
+                <div className="empty">
+                Noch keine Einträge.
                 </div>
+            ) : (
+                entries.slice(0, 30).map((entry) => (
+                <div className="entry" key={entry.id}>
+                    <div className="entryMain">
+                    <div className="entryTitle">
+                        {entry.customers?.name}
+                    </div>
 
-                <div className="entryActions">
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    onClick={() => startEdit(entry)}
-                  >
-                    Bearbeiten
-                  </button>
+                    <div className="entryMeta">
+                        {niceDate(entry.work_date)} ·{' '}
+                        {String(entry.hours).replace('.', ',')}{' '}
+                        Std.
+                        {entry.notes
+                        ? ` · ${entry.notes}`
+                        : ''}
+                    </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    className="btn danger"
-                    onClick={() => remove(entry.id)}
-                  >
-                    Löschen
-                  </button>
+                    <div className="entryActions">
+                    <button
+                        type="button"
+                        className="btn secondary"
+                        onClick={() => startEdit(entry)}
+                    >
+                        Bearbeiten
+                    </button>
+
+                    <button
+                        type="button"
+                        className="btn danger"
+                        onClick={() => remove(entry.id)}
+                    >
+                        Löschen
+                    </button>
+                    </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+                ))
+            )}
+            </div>
+        )}
+        </section>
 
       {editing && (
         <div
