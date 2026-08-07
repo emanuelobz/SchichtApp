@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import LogoutButton from '@/components/LogoutButton'
 import { createClient } from '@/lib/supabase/client'
 import RoundMailsPanel from '@/components/RoundMailsPanel'
+import CustomerProfile from '@/components/CustomerProfile'
 
 type Entry = {
   id: string
@@ -29,6 +30,7 @@ type Customer = {
   service_location?: string | null
   invoice_description?: string | null
   notes?: string | null
+  categories?: string[] | null
 }
 
 type Profile = { id: string; display_name: string; role: string }
@@ -121,6 +123,7 @@ const blankCustomer = (): Customer => ({
   service_location: '',
   invoice_description: '',
   notes: '',
+  categories: [],
 })
 
 const defaultSettings: CompanySettings = {
@@ -158,6 +161,7 @@ export default function AdminClient({
   const [status, setStatus] = useState('')
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [profileCustomer, setProfileCustomer] = useState<Customer | null>(null)
   const [newCustomer, setNewCustomer] = useState<Customer>(blankCustomer())
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null)
   const [monthSending, setMonthSending] = useState(false)
@@ -287,6 +291,7 @@ export default function AdminClient({
       service_location: customer.service_location?.trim() || null,
       invoice_description: customer.invoice_description?.trim() || null,
       notes: customer.notes?.trim() || null,
+      categories: customer.categories || [],
     }
     if (!payload.name) return alert('Bitte Kundennamen eintragen.')
     const query = isNew
@@ -561,7 +566,26 @@ export default function AdminClient({
       {tab === 'customers' && (
         <div className="split">
           <CustomerForm title="Neuen Kunden anlegen" customer={newCustomer} onChange={setNewCustomer} onSave={() => saveCustomer(newCustomer, true)} saveLabel="Kunde speichern" />
-          <section className="card"><h2>Kundenliste</h2><div className="entryList">{customerRows.map((customer) => <div className="entry" key={customer.id}><div className="entryMain"><div className="entryTitle">{customer.name}</div><div className="entryMeta">{euro(customer.hourly_rate)} · {customer.address || 'Adresse fehlt'} · {customer.email || 'E-Mail fehlt'}{customer.invoice_description ? ` · ${customer.invoice_description}` : ''}</div></div><button className="btn secondary" onClick={() => setEditingCustomer(customer)}>Bearbeiten</button></div>)}</div></section>
+          <section className="card">
+            <h2>Kundenliste</h2>
+            <div className="entryList">
+              {customerRows.map((customer) => (
+                <div className="entry" key={customer.id}>
+                  <div className="entryMain">
+                    <div className="entryTitle">{customer.name}</div>
+                    <div className="entryMeta">
+                      {euro(customer.hourly_rate)} · {customer.address || 'Adresse fehlt'} · {customer.email || 'E-Mail fehlt'}
+                      {customer.categories?.length ? ` · ${customer.categories.join(' · ')}` : ''}
+                    </div>
+                  </div>
+                  <div className="entryActions">
+                    <button className="btn primary" onClick={() => setProfileCustomer(customer)}>Profil</button>
+                    <button className="btn secondary" onClick={() => setEditingCustomer(customer)}>Bearbeiten</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       )}
 
@@ -686,6 +710,18 @@ export default function AdminClient({
         </div><label className="checkline"><input type="checkbox" checked={settings.small_business} onChange={(e) => setSettings({ ...settings, small_business: e.target.checked })} /> Kleinunternehmerregelung nach § 19 UStG</label><button className="btn primary" onClick={saveSettings}>Unternehmensdaten speichern</button></section>
       )}
 
+      {profileCustomer && (
+        <div className="modalBackdrop" onClick={() => setProfileCustomer(null)}>
+          <div className="card modal stack" style={{ width: 'min(960px, calc(100vw - 24px))', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <CustomerProfile
+              customer={profileCustomer}
+              onClose={() => setProfileCustomer(null)}
+              onEdit={() => { setProfileCustomer(null); setEditingCustomer(profileCustomer) }}
+            />
+          </div>
+        </div>
+      )}
+
       {editingEntry && <div className="modalBackdrop" onClick={() => setEditingEntry(null)}><div className="card modal stack" onClick={(e) => e.stopPropagation()}><h2>Eintrag bearbeiten</h2><div className="field"><label>Mitarbeiterin</label><select value={editingEntry.worker_id} onChange={(e) => setEditingEntry({ ...editingEntry, worker_id: e.target.value })}>{workers.map((w) => <option key={w.id} value={w.id}>{w.display_name}</option>)}</select></div><div className="field"><label>Kunde</label><select value={editingEntry.customer_id} onChange={(e) => setEditingEntry({ ...editingEntry, customer_id: e.target.value })}>{customerRows.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="field"><label>Datum</label><input type="date" value={editingEntry.work_date} onChange={(e) => setEditingEntry({ ...editingEntry, work_date: e.target.value })} /></div><div className="field"><label>Stunden</label><input value={editingEntry.hours} onChange={(e) => setEditingEntry({ ...editingEntry, hours: Number(e.target.value.replace(',', '.')) })} /></div><div className="field"><label>Notiz</label><textarea value={editingEntry.notes || ''} onChange={(e) => setEditingEntry({ ...editingEntry, notes: e.target.value })} /></div><div className="actions"><button className="btn secondary" onClick={() => setEditingEntry(null)}>Abbrechen</button><button className="btn primary" onClick={updateEntry}>Speichern</button></div></div></div>}
       {editingCustomer && <div className="modalBackdrop" onClick={() => setEditingCustomer(null)}><div onClick={(e) => e.stopPropagation()}><CustomerForm title="Kunde bearbeiten" customer={editingCustomer} onChange={setEditingCustomer} onSave={() => saveCustomer(editingCustomer)} saveLabel="Änderungen speichern" onCancel={() => setEditingCustomer(null)} /></div></div>}
     </main>
@@ -700,7 +736,17 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
   return <div className="field"><label>{label}</label><input type="number" step={step} value={value ?? ''} onChange={(e) => onChange(Number(e.target.value))} /></div>
 }
 
+const CUSTOMER_CATEGORIES = ['Privat', 'Ferienwohnung', 'Büro', 'Praxis', 'Stammkunde', 'Premium']
+
 function CustomerForm({ title, customer, onChange, onSave, saveLabel, onCancel }: { title: string; customer: Customer; onChange: (value: Customer) => void; onSave: () => void; saveLabel: string; onCancel?: () => void }) {
+  const selectedCategories = customer.categories || []
+  const toggleCategory = (category: string) => {
+    const next = selectedCategories.includes(category)
+      ? selectedCategories.filter((item) => item !== category)
+      : [...selectedCategories, category]
+    onChange({ ...customer, categories: next })
+  }
+
   return <section className="card stack customerForm"><h2>{title}</h2><div className="formGrid">
     <TextField label="Name" value={customer.name} onChange={(v) => onChange({ ...customer, name: v })} />
     <NumberField label="Stundenpreis" value={Number(customer.hourly_rate)} step={0.5} onChange={(v) => onChange({ ...customer, hourly_rate: v })} />
@@ -712,5 +758,22 @@ function CustomerForm({ title, customer, onChange, onSave, saveLabel, onCancel }
     <TextField label="Leistungsort (optional)" value={customer.service_location || ''} onChange={(v) => onChange({ ...customer, service_location: v })} />
     <TextField label="Individuelle Leistungsbeschreibung" value={customer.invoice_description || ''} onChange={(v) => onChange({ ...customer, invoice_description: v })} />
     <TextField label="Notizen" value={customer.notes || ''} onChange={(v) => onChange({ ...customer, notes: v })} />
-  </div><label className="checkline"><input type="checkbox" checked={customer.active} onChange={(e) => onChange({ ...customer, active: e.target.checked })} /> Kunde ist aktiv</label><div className="actions">{onCancel && <button className="btn secondary" onClick={onCancel}>Abbrechen</button>}<button className="btn primary" onClick={onSave}>{saveLabel}</button></div></section>
+  </div>
+  <div className="field">
+    <label>Kategorien</label>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {CUSTOMER_CATEGORIES.map((category) => (
+        <button
+          key={category}
+          type="button"
+          className={`btn ${selectedCategories.includes(category) ? 'primary' : 'secondary'}`}
+          onClick={() => toggleCategory(category)}
+        >
+          {category}
+        </button>
+      ))}
+    </div>
+    <div className="muted">Mehrere Kategorien können gleichzeitig ausgewählt werden.</div>
+  </div>
+  <label className="checkline"><input type="checkbox" checked={customer.active} onChange={(e) => onChange({ ...customer, active: e.target.checked })} /> Kunde ist aktiv</label><div className="actions">{onCancel && <button className="btn secondary" onClick={onCancel}>Abbrechen</button>}<button className="btn primary" onClick={onSave}>{saveLabel}</button></div></section>
 }

@@ -33,7 +33,7 @@ export default async function AdminPage() {
         .order('work_date', { ascending: false }),
       supabase
         .from('customers')
-        .select('id,name,hourly_rate,active,address,email,price_tier,travel_minutes,kilometers,service_location,invoice_description,notes')
+        .select('id,name,hourly_rate,active,address,email,price_tier,travel_minutes,kilometers,service_location,invoice_description,notes,categories')
         .order('name'),
       supabase
         .from('profiles')
