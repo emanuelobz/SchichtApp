@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import LogoutButton from '@/components/LogoutButton'
 import { createClient } from '@/lib/supabase/client'
+import RoundMailsPanel from '@/components/RoundMailsPanel'
 
 type Entry = {
   id: string
@@ -148,7 +149,7 @@ export default function AdminClient({
   initialSettings,
   initialInvoices,
 }: Props) {
-  const [tab, setTab] = useState<'overview' | 'entries' | 'customers' | 'invoices' | 'settings'>('overview')
+  const [tab, setTab] = useState<'overview' | 'entries' | 'customers' | 'invoices' | 'mail' | 'settings'>('overview')
   const [month, setMonth] = useState(currentMonth())
   const [entries, setEntries] = useState<Entry[]>(initialEntries)
   const [customerRows, setCustomerRows] = useState<Customer[]>(customers)
@@ -509,6 +510,7 @@ export default function AdminClient({
           ['entries', 'Einträge'],
           ['customers', 'Kunden'],
           ['invoices', 'Rechnungen'],
+          ['mail', 'Rundmails'],
           ['settings', 'Einstellungen'],
         ].map(([value, label]) => (
           <button key={value} className={`tab ${tab === value ? 'active' : ''}`} onClick={() => setTab(value as typeof tab)}>
@@ -655,6 +657,15 @@ export default function AdminClient({
               </div>
             </section>
         </div>
+      )}
+
+      {tab === 'mail' && (
+        <RoundMailsPanel
+          customers={customerRows}
+          senderName={settings.owner_name || settings.company_name || 'Juliet Obazee'}
+          senderEmail={settings.email || ''}
+          onStatus={setStatus}
+        />
       )}
 
       {tab === 'settings' && (
